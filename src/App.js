@@ -398,15 +398,15 @@ function EmailModal({ results, confidence, fileNames, onClose }) {
     try {
       // ✅ CHANGE 5: EmailJS credentials now read from environment variables
       await emailjs.send(
-        process.env.REACT_APP_EMAILJS_SERVICE_ID,
-        process.env.REACT_APP_EMAILJS_TEMPLATE_ID,
+        "service_3z7jkbd",
+        "template_qyhmwri",
         {
           name:    "Freight Validator",
           email:   to,
           subject: subject,
           message: message ? message + "\n\n---\n\n" + autoBody : autoBody,
         },
-        process.env.REACT_APP_EMAILJS_PUBLIC_KEY
+        "LF4RF47mB0d6kpLPB"
       );
       setSent("done");
       setTimeout(onClose, 2500);

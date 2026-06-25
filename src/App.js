@@ -399,19 +399,11 @@ function EmailModal({ results, confidence, fileNames, onClose }) {
 try {
   const body = message ? message + "\n\n---\n\n" + autoBody : autoBody;
 
-  const res = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "Freight Validator <onboarding@resend.dev>",
-      to: [to],
-      subject: subject,
-      text: body,
-    }),
-  });
+  const res = await fetch("/api/send-email", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ to, subject, text: body }),
+});
 
   if (!res.ok) {
     const errData = await res.json();

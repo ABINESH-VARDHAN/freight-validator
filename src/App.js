@@ -50,36 +50,36 @@ const MODES = {
     label: "Sea Freight",
     icon: "🚢",
     docs: [
-      { key: "invoice",     label: "Commercial Invoice" },
-      { key: "billOfLading",label: "Bill of Lading" },
-      { key: "packingList", label: "Packing List" },
+      { key: "invoice",      label: "Commercial Invoice" },
+      { key: "billOfLading", label: "Bill of Lading" },
+      { key: "packingList",  label: "Packing List" },
     ],
   },
   air: {
     label: "Air Freight",
     icon: "✈️",
     docs: [
-      { key: "invoice",     label: "Commercial Invoice" },
-      { key: "billOfLading",label: "Air Waybill (AWB)" },
-      { key: "packingList", label: "Packing List" },
+      { key: "invoice",      label: "Commercial Invoice" },
+      { key: "billOfLading", label: "Air Waybill (AWB)" },
+      { key: "packingList",  label: "Packing List" },
     ],
   },
   road: {
     label: "Road Freight",
     icon: "🚚",
     docs: [
-      { key: "invoice",     label: "Commercial Invoice" },
-      { key: "billOfLading",label: "CMR Waybill" },
-      { key: "packingList", label: "Packing List" },
+      { key: "invoice",      label: "Commercial Invoice" },
+      { key: "billOfLading", label: "CMR Waybill" },
+      { key: "packingList",  label: "Packing List" },
     ],
   },
   rail: {
     label: "Rail Freight",
     icon: "🚂",
     docs: [
-      { key: "invoice",     label: "Commercial Invoice" },
-      { key: "billOfLading",label: "Rail Consignment Note" },
-      { key: "packingList", label: "Packing List" },
+      { key: "invoice",      label: "Commercial Invoice" },
+      { key: "billOfLading", label: "Rail Consignment Note" },
+      { key: "packingList",  label: "Packing List" },
     ],
   },
   multi: {
@@ -103,8 +103,8 @@ const MODES = {
         label: "Road leg",
         sub: "Port → Inland warehouse",
         docs: [
-          { key: "cmr",        label: "CMR / Truck Waybill" },
-          { key: "roadInvoice",label: "Road Freight Invoice" },
+          { key: "cmr",         label: "CMR / Truck Waybill" },
+          { key: "roadInvoice", label: "Road Freight Invoice" },
         ],
       },
       {
@@ -113,9 +113,9 @@ const MODES = {
         label: "Common docs",
         sub: "Applies to all legs",
         docs: [
-          { key: "invoice",     label: "Commercial Invoice" },
-          { key: "origin",      label: "Certificate of Origin" },
-          { key: "insurance",   label: "Insurance Certificate" },
+          { key: "invoice",   label: "Commercial Invoice" },
+          { key: "origin",    label: "Certificate of Origin" },
+          { key: "insurance", label: "Insurance Certificate" },
         ],
       },
     ],
@@ -383,7 +383,6 @@ function EmailModal({ results, confidence, fileNames, onClose }) {
   const [subject, setSubject] = useState("Freight Document Validation Report");
   const [message, setMessage] = useState("");
   const [tab, setTab]         = useState("compose");
-  // false | "sending" | "done"
   const [sent, setSent]       = useState(false);
   const autoBody = buildEmailBody(results, confidence, fileNames);
   const errors   = results?.issues?.filter(i => i.severity === "error")   || [];
@@ -397,16 +396,17 @@ function EmailModal({ results, confidence, fileNames, onClose }) {
     setSent("sending");
 
     try {
+      // ✅ CHANGE 5: EmailJS credentials now read from environment variables
       await emailjs.send(
-        "service_ug4nnoh",
-        "template_z889hmw",
+        process.env.REACT_APP_EMAILJS_SERVICE_ID,
+        process.env.REACT_APP_EMAILJS_TEMPLATE_ID,
         {
           name:    "Freight Validator",
           email:   to,
           subject: subject,
           message: message ? message + "\n\n---\n\n" + autoBody : autoBody,
         },
-        "q5qoHTvzZGjK_sHPA"
+        process.env.REACT_APP_EMAILJS_PUBLIC_KEY
       );
       setSent("done");
       setTimeout(onClose, 2500);
@@ -562,6 +562,10 @@ function HistoryCard({ entry, index, total }) {
 /* ─── Main Dashboard ──────────────────────────────────────────────── */
 function Dashboard() {
   const { user, logout } = useAuth();
+
+  // ✅ CHANGE 1: History key scoped to logged-in user's email
+  const historyKey = `fv_history_${user.id}`;
+
   const [files, setFiles]                   = useState({});
   const [transportMode, setTransportMode]   = useState("sea");
   const [loading, setLoading]               = useState(false);
@@ -573,9 +577,12 @@ function Dashboard() {
   const [batchSets, setBatchSets]           = useState([]);
   const [batchLoading, setBatchLoading]     = useState(false);
   const [sidebarOpen, setSidebarOpen]       = useState(false);
+
+  // ✅ CHANGE 2: Read history from user-scoped localStorage key
   const [history, setHistory] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("freight_validator_history") || "[]"); } catch { return []; }
+    try { return JSON.parse(localStorage.getItem(historyKey) || "[]"); } catch { return []; }
   });
+
   const [theme, setTheme] = useState(() => {
     const sys = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
     document.documentElement.setAttribute("data-theme", sys);
@@ -641,7 +648,8 @@ function Dashboard() {
       };
       const updated = [entry, ...history].slice(0, 20);
       setHistory(updated);
-      localStorage.setItem("freight_validator_history", JSON.stringify(updated));
+      // ✅ CHANGE 3: Save history under user-scoped key
+      localStorage.setItem(historyKey, JSON.stringify(updated));
       setActiveTab("results");
     } catch (err) {
       console.error(err);
@@ -731,9 +739,9 @@ function Dashboard() {
               onClick={() => { setActiveTab(item.id); setSidebarOpen(false); }}>
               <span className="nav-icon">{item.icon}</span>
               <span className="nav-label">{item.label}</span>
-              {item.id === "results" && results            && <span className="nav-badge">{total}</span>}
-              {item.id === "batch"   && batchSets.length > 0 && <span className="nav-badge">{batchSets.length}</span>}
-              {item.id === "history" && history.length > 0   && <span className="nav-badge">{history.length}</span>}
+              {item.id === "results" && results               && <span className="nav-badge">{total}</span>}
+              {item.id === "batch"   && batchSets.length > 0  && <span className="nav-badge">{batchSets.length}</span>}
+              {item.id === "history" && history.length > 0    && <span className="nav-badge">{history.length}</span>}
             </button>
           ))}
         </nav>
@@ -942,9 +950,9 @@ function Dashboard() {
                     </div>
                     <div className="batch-drops">
                       {[
-                        { key: "invoice",     label: "Commercial Invoice" },
-                        { key: "billOfLading",label: MODES[set.mode]?.docs[1]?.label || "Bill of Lading" },
-                        { key: "packingList", label: "Packing List" },
+                        { key: "invoice",      label: "Commercial Invoice" },
+                        { key: "billOfLading", label: MODES[set.mode]?.docs[1]?.label || "Bill of Lading" },
+                        { key: "packingList",  label: "Packing List" },
                       ].map(({ key, label }) => (
                         <label key={key} className={`batch-drop ${set[key] ? "has-file" : ""}`}>
                           <input type="file" accept=".pdf" style={{ display: "none" }}
@@ -986,7 +994,8 @@ function Dashboard() {
               <>
                 <div className="history-toolbar">
                   <div className="history-hint">💡 Tap any row to expand details</div>
-                  <button className="ghost-btn danger" onClick={() => { setHistory([]); localStorage.removeItem("freight_validator_history"); }}>
+                  {/* ✅ CHANGE 4: Clear History uses user-scoped key */}
+                  <button className="ghost-btn danger" onClick={() => { setHistory([]); localStorage.removeItem(historyKey); }}>
                     🗑 Clear History
                   </button>
                 </div>

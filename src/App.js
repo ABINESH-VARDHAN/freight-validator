@@ -396,35 +396,35 @@ function EmailModal({ results, confidence, fileNames, onClose }) {
     if (!to.includes("@")) { alert("Enter a valid email address."); return; }
     setSent("sending");
 
-    try {
-      const body = message ? message + "\n\n---\n\n" + autoBody : autoBody;
+try {
+  const body = message ? message + "\n\n---\n\n" + autoBody : autoBody;
 
-      const res = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${RESEND_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          from: "Freight Validator <onboarding@resend.dev>",
-          to: [to],
-          subject: subject,
-          text: body,
-        }),
-      });
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: "Freight Validator <onboarding@resend.dev>",
+      to: [to],
+      subject: subject,
+      text: body,
+    }),
+  });
 
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.message || "Failed to send email");
-      }
+  if (!res.ok) {
+    const errData = await res.json();
+    throw new Error(errData.message || "Failed to send email");
+  }
 
-      setSent("done");
-      setTimeout(onClose, 2500);
-    } catch (err) {
-      console.error("Resend error:", err);
-      alert("Failed to send: " + err.message);
-      setSent(false);
-    }
+  setSent("done");
+  setTimeout(onClose, 2500);
+  } catch (err) {
+  console.error("Resend error:", err);
+  alert("Failed to send: " + err.message);
+  setSent(false);
+  }
   };
 
   return (

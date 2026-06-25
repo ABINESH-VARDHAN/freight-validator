@@ -1,6 +1,5 @@
 import { useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
-import emailjs from "@emailjs/browser";
 import { validateDocuments } from "./services/GroqApi";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import LoginPage from "./auth/LoginPage";
@@ -8,6 +7,8 @@ import ResultsPanel from "./components/ResultsPanel";
 import "./App.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
+
+const RESEND_API_KEY = "re_3mpSbU3u_64Da6N5Wto43UwtR53XKAcaR";
 
 /* ─── PDF text extraction ─────────────────────────────────────────── */
 async function extractTextFromPDF(file) {
@@ -396,23 +397,32 @@ function EmailModal({ results, confidence, fileNames, onClose }) {
     setSent("sending");
 
     try {
-      // ✅ CHANGE 5: EmailJS credentials now read from environment variables
-      await emailjs.send(
-        "service_3z7jkbd",
-        "template_qyhmwri",
-        {
-          name:    "Freight Validator",
-          email:   to,
-          subject: subject,
-          message: message ? message + "\n\n---\n\n" + autoBody : autoBody,
+      const body = message ? message + "\n\n---\n\n" + autoBody : autoBody;
+
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${RESEND_API_KEY}`,
+          "Content-Type": "application/json",
         },
-        "LF4RF47mB0d6kpLPB"
-      );
+        body: JSON.stringify({
+          from: "Freight Validator <onboarding@resend.dev>",
+          to: [to],
+          subject: subject,
+          text: body,
+        }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.message || "Failed to send email");
+      }
+
       setSent("done");
       setTimeout(onClose, 2500);
     } catch (err) {
-      console.error("EmailJS error:", err);
-      alert("Failed to send. Check console for details.");
+      console.error("Resend error:", err);
+      alert("Failed to send: " + err.message);
       setSent(false);
     }
   };
@@ -563,7 +573,6 @@ function HistoryCard({ entry, index, total }) {
 function Dashboard() {
   const { user, logout } = useAuth();
 
-  // ✅ CHANGE 1: History key scoped to logged-in user's email
   const historyKey = `fv_history_${user.id}`;
 
   const [files, setFiles]                   = useState({});
@@ -578,7 +587,6 @@ function Dashboard() {
   const [batchLoading, setBatchLoading]     = useState(false);
   const [sidebarOpen, setSidebarOpen]       = useState(false);
 
-  // ✅ CHANGE 2: Read history from user-scoped localStorage key
   const [history, setHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem(historyKey) || "[]"); } catch { return []; }
   });
@@ -648,7 +656,6 @@ function Dashboard() {
       };
       const updated = [entry, ...history].slice(0, 20);
       setHistory(updated);
-      // ✅ CHANGE 3: Save history under user-scoped key
       localStorage.setItem(historyKey, JSON.stringify(updated));
       setActiveTab("results");
     } catch (err) {
@@ -994,7 +1001,6 @@ function Dashboard() {
               <>
                 <div className="history-toolbar">
                   <div className="history-hint">💡 Tap any row to expand details</div>
-                  {/* ✅ CHANGE 4: Clear History uses user-scoped key */}
                   <button className="ghost-btn danger" onClick={() => { setHistory([]); localStorage.removeItem(historyKey); }}>
                     🗑 Clear History
                   </button>

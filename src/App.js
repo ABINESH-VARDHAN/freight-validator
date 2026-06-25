@@ -8,7 +8,7 @@ import "./App.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
 
-const RESEND_API_KEY = "re_3mpSbU3u_64Da6N5Wto43UwtR53XKAcaR";
+
 /* ─── PDF text extraction ─────────────────────────────────────────── */
 async function extractTextFromPDF(file) {
   if (!file) return "";

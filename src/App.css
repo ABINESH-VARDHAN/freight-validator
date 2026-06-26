@@ -1847,3 +1847,77 @@ body {
 
   .dz-label { font-size: 0.75rem; }
 }
+  /* ─── Login page additions ─────────────────────────────────────────── */
+
+.login-sub {
+  font-size: 0.88rem;
+  color: var(--text-secondary, #5a6f8a);
+  margin: -8px 0 16px;
+  line-height: 1.5;
+}
+
+.login-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -4px 0 4px;
+}
+
+.login-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #5a6f8a);
+  cursor: pointer;
+}
+
+.login-remember input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #2d7dd2;
+}
+
+.login-link {
+  background: none;
+  border: none;
+  color: #2d7dd2;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.login-link:hover { color: #1a5fa8; }
+.login-link:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.login-success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  color: #16a34a;
+}
+
+.login-switch {
+  text-align: center;
+  margin-top: 20px;
+  font-size: 0.88rem;
+  color: var(--text-secondary, #5a6f8a);
+}
+
+.otp-input {
+  font-size: 1.6rem !important;
+  letter-spacing: 0.5rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.login-otp-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 12px;
+}

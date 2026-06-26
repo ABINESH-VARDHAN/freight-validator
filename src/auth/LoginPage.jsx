@@ -8,10 +8,10 @@ export default function LoginPage() {
   const [screen, setScreen] = useState("login");
 
   // login fields
-  const [email, setEmail]       = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail]           = useState("");
+  const [password, setPassword]     = useState("");
   const [rememberMe, setRememberMe] = useState(false);
-  const [showPass, setShowPass] = useState(false);
+  const [showPass, setShowPass]     = useState(false);
 
   // register fields
   const [regName, setRegName]         = useState("");
@@ -25,11 +25,11 @@ export default function LoginPage() {
   const [otpEmail, setOtpEmail] = useState("");
 
   // forgot / reset
-  const [forgotEmail, setForgotEmail]       = useState("");
-  const [resetOtp, setResetOtp]             = useState("");
-  const [newPassword, setNewPassword]       = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [resetStep, setResetStep]           = useState(1); // 1=email, 2=otp+newpass
+  const [forgotEmail, setForgotEmail]           = useState("");
+  const [resetOtp, setResetOtp]                 = useState("");
+  const [newPassword, setNewPassword]           = useState("");
+  const [confirmPassword, setConfirmPassword]   = useState("");
+  const [resetStep, setResetStep]               = useState(1); // 1=email, 2=otp+newpass
 
   const [error, setError]     = useState("");
   const [success, setSuccess] = useState("");
@@ -42,8 +42,11 @@ export default function LoginPage() {
     e.preventDefault();
     clearMessages();
     setLoading(true);
-    const result = login(email, password);
+    const result = login(email, password, rememberMe);
     if (!result.ok) { setError(result.error); setLoading(false); return; }
+
+    // Trusted device — skip 2FA, go straight in
+    if (!result.needsOtp) { setLoading(false); return; }
 
     // Send OTP
     setOtpEmail(email);
@@ -81,7 +84,7 @@ export default function LoginPage() {
     if (!result.ok) { setError(result.error); return; }
     // Auto-login after register — send OTP
     setLoading(true);
-    login(regEmail, regPassword);
+    login(regEmail, regPassword, false);
     setOtpEmail(regEmail);
     const sent = await sendOtp(regEmail, "login");
     setLoading(false);

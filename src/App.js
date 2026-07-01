@@ -4,7 +4,6 @@ import { validateDocuments } from "./services/GroqApi";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import LoginPage from "./auth/LoginPage";
 import ResultsPanel from "./components/ResultsPanel";
-import ProfilePanel from "./components/ProfilePanel";
 import "./App.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
@@ -710,7 +709,6 @@ function Dashboard() {
     { id: "results", icon: "📊", label: "Results" },
     { id: "batch", icon: "📦", label: "Batch" },
     { id: "history", icon: "🕐", label: "History" },
-    { id: "profile", icon: "👤", label: "Profile" },
   ];
   const bolHeaderLabel =
     transportMode === "air"   ? "Air Waybill (AWB)" :
@@ -1010,11 +1008,6 @@ function Dashboard() {
             )}
           </div>
         )}
-        {activeTab === "profile" && (
-        <div className="tab-content">
-          <ProfilePanel />
-        </div>
-      )}
       </main>
 
       {showEmailModal && results && (

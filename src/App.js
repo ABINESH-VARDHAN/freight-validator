@@ -4,6 +4,7 @@ import { validateDocuments } from "./services/GroqApi";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import LoginPage from "./auth/LoginPage";
 import ResultsPanel from "./components/ResultsPanel";
+import ProfilePanel from "./components/ProfilePanel";
 import "./App.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
@@ -706,11 +707,11 @@ function Dashboard() {
 
   const navItems = [
     { id: "validate", icon: "📋", label: "Validate" },
-    { id: "results",  icon: "📊", label: "Results" },
-    { id: "batch",    icon: "📦", label: "Batch" },
-    { id: "history",  icon: "🕐", label: "History" },
+    { id: "results", icon: "📊", label: "Results" },
+    { id: "batch", icon: "📦", label: "Batch" },
+    { id: "history", icon: "🕐", label: "History" },
+    { id: "profile", icon: "👤", label: "Profile" },
   ];
-
   const bolHeaderLabel =
     transportMode === "air"   ? "Air Waybill (AWB)" :
     transportMode === "road"  ? "CMR Waybill" :
@@ -745,7 +746,12 @@ function Dashboard() {
         </nav>
         <div className="sidebar-footer">
           <div className="sidebar-user">
-            <div className="user-avatar" style={{ background: "#1254b5" }}>{user.avatar}</div>
+            <div
+    className="user-avatar"
+    style={{
+        background: user.avatarColor || "#1254b5",
+    }}
+        >{user.avatar}</div>
             <div className="user-info">
               <div className="user-name">{user.name}</div>
             </div>
@@ -769,6 +775,7 @@ function Dashboard() {
               {activeTab === "results"  && "Validation Results"}
               {activeTab === "batch"    && "Batch Validation"}
               {activeTab === "history"  && "Validation History"}
+              {activeTab === "profile" && "My Profile"}
             </div>
           </div>
           <div className="topbar-right">
@@ -1003,6 +1010,11 @@ function Dashboard() {
             )}
           </div>
         )}
+        {activeTab === "profile" && (
+        <div className="tab-content">
+          <ProfilePanel />
+        </div>
+      )}
       </main>
 
       {showEmailModal && results && (

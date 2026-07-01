@@ -3,6 +3,7 @@ import { createContext, useContext, useState } from "react";
 const AuthContext = createContext(null);
 
 function hashPassword(password) {
+  // Simple hash for localStorage-based auth (not for production with real backend)
   let hash = 0;
   for (let i = 0; i < password.length; i++) {
     const char = password.charCodeAt(i);
@@ -29,8 +30,8 @@ export function AuthProvider({ children }) {
   });
 
   const [loginError, setLoginError]   = useState("");
-  const [pendingUser, setPendingUser] = useState(null);
-  const [otpStore, setOtpStore]       = useState({});
+  const [pendingUser, setPendingUser] = useState(null); // user waiting for 2FA
+  const [otpStore, setOtpStore]       = useState({});   // { email: { code, expires } }
 
   // ── Register ──────────────────────────────────────────────────────
   const register = (name, email, password) => {
@@ -41,43 +42,33 @@ export function AuthProvider({ children }) {
     const users = getUsers();
     if (users[email.toLowerCase()]) return { ok: false, error: "An account with this email already exists." };
 
-  const newUser = {
-    id: email.toLowerCase(),
-    name: name.trim(),
-    email: email.toLowerCase(),
-    avatar: name.trim().charAt(0).toUpperCase(),
-    avatarColor: "#2563eb",
-    passwordHash: hashPassword(password),
-    createdAt: new Date().toISOString(),
-   };
+    const newUser = {
+      id: email.toLowerCase(),
+      name: name.trim(),
+      email: email.toLowerCase(),
+      avatar: name.trim().charAt(0).toUpperCase(),
+      passwordHash: hashPassword(password),
+      createdAt: new Date().toISOString(),
+    };
     users[email.toLowerCase()] = newUser;
     saveUsers(users);
     return { ok: true };
   };
 
-  // ── Login (step 1) ────────────────────────────────────────────────
-  const login = (email, password, rememberMe = false) => {
+  // ── Login (step 1 — verify credentials, then trigger 2FA) ─────────
+  const login = (email, password) => {
     const users = getUsers();
     const found = users[email.toLowerCase()];
     if (!found) return { ok: false, error: "No account found with this email." };
     if (found.passwordHash !== hashPassword(password)) return { ok: false, error: "Incorrect password." };
 
-  const safeUser = {
-    id: found.id,
-    name: found.name,
-    email: found.email,
-    avatar: found.avatar,
-    avatarColor: found.avatarColor || "#2563eb",
-    createdAt: found.createdAt,
-  };
-    // Check if this device is trusted (remember me was used before)
-    const trusted = localStorage.getItem(`fv_trusted_${email.toLowerCase()}`);
-    if (trusted === "true") {
-      setUser(safeUser);
-      localStorage.setItem("fv_session", JSON.stringify(safeUser));
-      return { ok: true, needsOtp: false };
-    }
-
+    // Store pending user and generate OTP
+    const safeUser = {
+      id: found.id,
+      name: found.name,
+      email: found.email,
+      avatar: found.avatar,
+    };
     setPendingUser(safeUser);
     return { ok: true, needsOtp: true };
   };
@@ -85,7 +76,7 @@ export function AuthProvider({ children }) {
   // ── Generate & send OTP ───────────────────────────────────────────
   const sendOtp = async (email, purpose = "login") => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = Date.now() + 10 * 60 * 1000;
+    const expires = Date.now() + 10 * 60 * 1000; // 10 minutes
     setOtpStore(prev => ({ ...prev, [email.toLowerCase()]: { code, expires, purpose } }));
 
     const subject = purpose === "login"
@@ -116,18 +107,17 @@ export function AuthProvider({ children }) {
     if (Date.now() > entry.expires) return { ok: false, error: "Code expired. Request a new one." };
     if (entry.code !== code.trim()) return { ok: false, error: "Incorrect code. Try again." };
 
+    // OTP correct — complete login
     setOtpStore(prev => { const n = { ...prev }; delete n[email.toLowerCase()]; return n; });
     setUser(pendingUser);
     setPendingUser(null);
-
     if (rememberMe) {
       localStorage.setItem("fv_session", JSON.stringify(pendingUser));
-      localStorage.setItem(`fv_trusted_${email.toLowerCase()}`, "true");
     }
     return { ok: true };
   };
 
-  // ── Forgot password ───────────────────────────────────────────────
+  // ── Forgot password — verify OTP & set new password ──────────────
   const verifyResetOtp = (email, code) => {
     const entry = otpStore[email.toLowerCase()];
     if (!entry) return { ok: false, error: "No OTP found. Request a new code." };
@@ -149,117 +139,8 @@ export function AuthProvider({ children }) {
     setOtpStore(prev => { const n = { ...prev }; delete n[email.toLowerCase()]; return n; });
     return { ok: true };
   };
-   // ── Update Profile ─────────────────────────────
 
-const updateProfile = (name) => {
-  if (!user) return { ok: false };
-
-  if (!name.trim()) {
-    return {
-      ok: false,
-      error: "Name cannot be empty.",
-    };
-  }
-
-  const users = getUsers();
-
-  users[user.email].name = name.trim();
-  users[user.email].avatar = name.trim().charAt(0).toUpperCase();
-
-  saveUsers(users);
-
-  const updated = {
-    ...user,
-    name: name.trim(),
-    avatar: name.trim().charAt(0).toUpperCase(),
-  };
-
-  setUser(updated);
-  localStorage.setItem("fv_session", JSON.stringify(updated));
-
-  return { ok: true };
-};
-
-
-// ── Avatar Color ─────────────────────────────
-
-const changeAvatarColor = (color) => {
-  if (!user) return;
-
-  const users = getUsers();
-
-  users[user.email].avatarColor = color;
-
-  saveUsers(users);
-
-  const updated = {
-    ...user,
-    avatarColor: color,
-  };
-
-  setUser(updated);
-
-  localStorage.setItem(
-    "fv_session",
-    JSON.stringify(updated)
-  );
-};
-
-
-// ── Change Password ─────────────────────────────
-
-const changePassword = (
-  currentPassword,
-  newPassword,
-  confirmPassword
-) => {
-
-  if (!user)
-    return {
-      ok: false,
-      error: "User not found.",
-    };
-
-  const users = getUsers();
-
-  const account = users[user.email];
-
-  if (
-    account.passwordHash !==
-    hashPassword(currentPassword)
-  ) {
-    return {
-      ok: false,
-      error: "Current password is incorrect.",
-    };
-  }
-
-  if (newPassword.length < 6) {
-    return {
-      ok: false,
-      error:
-        "Password must be at least 6 characters.",
-    };
-  }
-
-  if (newPassword !== confirmPassword) {
-    return {
-      ok: false,
-      error:
-        "Passwords do not match.",
-    };
-  }
-
-  account.passwordHash = hashPassword(newPassword);
-
-  saveUsers(users);
-
-  return {
-    ok: true,
-   };
- };
   // ── Logout ────────────────────────────────────────────────────────
-  
   const logout = () => {
     setUser(null);
     setPendingUser(null);
@@ -269,28 +150,12 @@ const changePassword = (
   const can = () => !!user;
 
   return (
-    <AuthContext.Provider vvalue={{
-  user,
-  pendingUser,
-
-  login,
-  register,
-  logout,
-
-  can,
-
-  sendOtp,
-  verifyLoginOtp,
-  verifyResetOtp,
-  resetPassword,
-
-  updateProfile,
-  changePassword,
-  changeAvatarColor,
-
-  loginError,
-  setLoginError,
-}}>
+    <AuthContext.Provider value={{
+      user, pendingUser,
+      login, register, logout, can,
+      sendOtp, verifyLoginOtp, verifyResetOtp, resetPassword,
+      loginError, setLoginError,
+    }}>
       {children}
     </AuthContext.Provider>
   );

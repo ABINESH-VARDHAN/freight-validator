@@ -41,14 +41,15 @@ export function AuthProvider({ children }) {
     const users = getUsers();
     if (users[email.toLowerCase()]) return { ok: false, error: "An account with this email already exists." };
 
-    const newUser = {
-      id: email.toLowerCase(),
-      name: name.trim(),
-      email: email.toLowerCase(),
-      avatar: name.trim().charAt(0).toUpperCase(),
-      passwordHash: hashPassword(password),
-      createdAt: new Date().toISOString(),
-    };
+  const newUser = {
+    id: email.toLowerCase(),
+    name: name.trim(),
+    email: email.toLowerCase(),
+    avatar: name.trim().charAt(0).toUpperCase(),
+    avatarColor: "#2563eb",
+    passwordHash: hashPassword(password),
+    createdAt: new Date().toISOString(),
+   };
     users[email.toLowerCase()] = newUser;
     saveUsers(users);
     return { ok: true };
@@ -61,13 +62,14 @@ export function AuthProvider({ children }) {
     if (!found) return { ok: false, error: "No account found with this email." };
     if (found.passwordHash !== hashPassword(password)) return { ok: false, error: "Incorrect password." };
 
-    const safeUser = {
-      id: found.id,
-      name: found.name,
-      email: found.email,
-      avatar: found.avatar,
-    };
-
+  const safeUser = {
+    id: found.id,
+    name: found.name,
+    email: found.email,
+    avatar: found.avatar,
+    avatarColor: found.avatarColor || "#2563eb",
+    createdAt: found.createdAt,
+  };
     // Check if this device is trusted (remember me was used before)
     const trusted = localStorage.getItem(`fv_trusted_${email.toLowerCase()}`);
     if (trusted === "true") {
@@ -147,8 +149,117 @@ export function AuthProvider({ children }) {
     setOtpStore(prev => { const n = { ...prev }; delete n[email.toLowerCase()]; return n; });
     return { ok: true };
   };
+   // ── Update Profile ─────────────────────────────
 
+const updateProfile = (name) => {
+  if (!user) return { ok: false };
+
+  if (!name.trim()) {
+    return {
+      ok: false,
+      error: "Name cannot be empty.",
+    };
+  }
+
+  const users = getUsers();
+
+  users[user.email].name = name.trim();
+  users[user.email].avatar = name.trim().charAt(0).toUpperCase();
+
+  saveUsers(users);
+
+  const updated = {
+    ...user,
+    name: name.trim(),
+    avatar: name.trim().charAt(0).toUpperCase(),
+  };
+
+  setUser(updated);
+  localStorage.setItem("fv_session", JSON.stringify(updated));
+
+  return { ok: true };
+};
+
+
+// ── Avatar Color ─────────────────────────────
+
+const changeAvatarColor = (color) => {
+  if (!user) return;
+
+  const users = getUsers();
+
+  users[user.email].avatarColor = color;
+
+  saveUsers(users);
+
+  const updated = {
+    ...user,
+    avatarColor: color,
+  };
+
+  setUser(updated);
+
+  localStorage.setItem(
+    "fv_session",
+    JSON.stringify(updated)
+  );
+};
+
+
+// ── Change Password ─────────────────────────────
+
+const changePassword = (
+  currentPassword,
+  newPassword,
+  confirmPassword
+) => {
+
+  if (!user)
+    return {
+      ok: false,
+      error: "User not found.",
+    };
+
+  const users = getUsers();
+
+  const account = users[user.email];
+
+  if (
+    account.passwordHash !==
+    hashPassword(currentPassword)
+  ) {
+    return {
+      ok: false,
+      error: "Current password is incorrect.",
+    };
+  }
+
+  if (newPassword.length < 6) {
+    return {
+      ok: false,
+      error:
+        "Password must be at least 6 characters.",
+    };
+  }
+
+  if (newPassword !== confirmPassword) {
+    return {
+      ok: false,
+      error:
+        "Passwords do not match.",
+    };
+  }
+
+  account.passwordHash = hashPassword(newPassword);
+
+  saveUsers(users);
+
+  return {
+    ok: true,
+   };
+ };
   // ── Logout ────────────────────────────────────────────────────────
+  
   const logout = () => {
     setUser(null);
     setPendingUser(null);
@@ -158,12 +269,28 @@ export function AuthProvider({ children }) {
   const can = () => !!user;
 
   return (
-    <AuthContext.Provider value={{
-      user, pendingUser,
-      login, register, logout, can,
-      sendOtp, verifyLoginOtp, verifyResetOtp, resetPassword,
-      loginError, setLoginError,
-    }}>
+    <AuthContext.Provider vvalue={{
+  user,
+  pendingUser,
+
+  login,
+  register,
+  logout,
+
+  can,
+
+  sendOtp,
+  verifyLoginOtp,
+  verifyResetOtp,
+  resetPassword,
+
+  updateProfile,
+  changePassword,
+  changeAvatarColor,
+
+  loginError,
+  setLoginError,
+}}>
       {children}
     </AuthContext.Provider>
   );

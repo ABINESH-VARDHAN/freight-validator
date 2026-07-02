@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "./AuthContext";
+import { validatePassword } from "../services/PasswordValidator";
 
 /* ─── Screens: "login" | "register" | "otp" | "forgot" | "reset" ── */
 
@@ -36,6 +37,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   const clearMessages = () => { setError(""); setSuccess(""); };
+
+  // Live password checklist / strength — register screen only
+  const pwValidation = validatePassword(regPassword);
+  const strengthLabel = { weak: "Weak", medium: "Medium", strong: "Strong" }[pwValidation.strength] || "";
 
   // ── Login submit ──────────────────────────────────────────────────
   const handleLogin = async (e) => {
@@ -76,6 +81,7 @@ export default function LoginPage() {
   const handleRegister = async (e) => {
     e.preventDefault();
     clearMessages();
+    if (!pwValidation.valid) { setError("Password does not meet all requirements below."); return; }
     if (regPassword !== regConfirm) { setError("Passwords do not match."); return; }
     const result = register(regName, regEmail, regPassword);
     if (!result.ok) { setError(result.error); return; }
@@ -236,6 +242,26 @@ export default function LoginPage() {
                     {showRegPass ? "Hide" : "Show"}
                   </button>
                 </div>
+                {regPassword.length > 0 && (
+                  <div className="pw-checklist">
+                    <div className="pw-checklist-title">Password Requirements</div>
+                    <ul className="pw-checklist-list">
+                      {pwValidation.checks.map((c) => (
+                        <li key={c.key} className={`pw-checklist-item ${c.passed ? "passed" : "failed"}`}>
+                          <span className="pw-checklist-icon">{c.passed ? "✔" : "✖"}</span>
+                          <span>{c.label}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="pw-strength-row">
+                      <span className="pw-strength-label">Strength:</span>
+                      <div className="pw-strength-bar">
+                        <div className={`pw-strength-fill ${pwValidation.strength}`} />
+                      </div>
+                      <span className={`pw-strength-text ${pwValidation.strength}`}>{strengthLabel}</span>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="login-field">
                 <label className="login-label">Confirm Password</label>

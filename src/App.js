@@ -1,9 +1,12 @@
 import { useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import { validateDocuments } from "./services/GroqApi";
+import { validateInvoice, validateBillOfLading, validateAwb, validatePackingList } from "./services/QuickValidator";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import LoginPage from "./auth/LoginPage";
 import ResultsPanel from "./components/ResultsPanel";
+import DocumentChecklist from "./components/DocumentChecklist";
+import emailjs from "@emailjs/browser";
 import "./App.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
@@ -256,6 +259,18 @@ function fileNameList(files, mode) {
   return MODES[mode].docs.map(d => files[d.key]?.name || d.label);
 }
 
+/* ─── Quick (instant, regex-only) document readiness validation ────── */
+// Maps an upload slot key to the right QuickValidator function.
+// Cross-document comparison stays with the Groq AI validator — this only
+// checks whether the expected fields are present on that single document.
+function quickValidatorForKey(key, mode) {
+  if (key === "invoice" || key === "seaInvoice" || key === "roadInvoice") return validateInvoice;
+  if (key === "billOfLading" || key === "seaBol") return mode === "air" ? validateAwb : validateBillOfLading;
+  if (key === "cmr") return validateBillOfLading;
+  if (key === "packingList") return validatePackingList;
+  return null;
+}
+
 /* ─── Export helpers ──────────────────────────────────────────────── */
 function exportReportAsHTML(results, confidence, fileNames) {
   const date     = new Date().toLocaleString();
@@ -395,25 +410,30 @@ function EmailModal({ results, confidence, fileNames, onClose }) {
     if (!to.includes("@")) { alert("Enter a valid email address."); return; }
     setSent("sending");
 
-try {
-  const body = message ? message + "\n\n---\n\n" + autoBody : autoBody;
+  try {
+  const body = message
+    ? message + "\n\n-------------------------\n\n" + autoBody
+    : autoBody;
 
-  const res = await fetch("/api/send-email", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ to, subject, text: body }),
-});
-
-  if (!res.ok) {
-    const errData = await res.json();
-    throw new Error(errData.message || "Failed to send email");
-  }
+  await emailjs.send(
+    process.env.REACT_APP_EMAILJS_SERVICE_ID,
+    process.env.REACT_APP_EMAILJS_TEMPLATE_ID,
+    {
+      email: to,
+      subject: subject,
+      message: body,
+    },
+    process.env.REACT_APP_EMAILJS_PUBLIC_KEY
+  );
 
   setSent("done");
   setTimeout(onClose, 2500);
+
   } catch (err) {
-  console.error("Resend error:", err);
-  alert("Failed to send: " + err.message);
+  console.error(err);
+
+  alert("Failed to send email.");
+
   setSent(false);
   }
   };
@@ -578,6 +598,11 @@ function Dashboard() {
   const [batchLoading, setBatchLoading]     = useState(false);
   const [sidebarOpen, setSidebarOpen]       = useState(false);
 
+  // Instant, browser-side readiness checklist state (per upload slot key)
+  const [docTexts, setDocTexts]             = useState({});
+  const [docChecks, setDocChecks]           = useState({});
+  const [extractingKeys, setExtractingKeys] = useState({});
+
   const [history, setHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem(historyKey) || "[]"); } catch { return []; }
   });
@@ -594,32 +619,78 @@ function Dashboard() {
     document.documentElement.setAttribute("data-theme", next);
   };
 
-  const handleFile = (key, file) => setFiles(prev => ({ ...prev, [key]: file }));
+  // Immediately after a file is dropped/selected, extract its text and run
+  // the instant regex-based readiness checklist (QuickValidator). No AI,
+  // no backend — this is purely client-side and runs in real time.
+  const handleFile = async (key, file) => {
+    setFiles(prev => ({ ...prev, [key]: file }));
+    setDocChecks(prev => { const n = { ...prev }; delete n[key]; return n; });
+    setDocTexts(prev => { const n = { ...prev }; delete n[key]; return n; });
+
+    const validator = quickValidatorForKey(key, transportMode);
+    if (!validator || !file) return;
+
+    setExtractingKeys(prev => ({ ...prev, [key]: true }));
+    try {
+      const text = await extractTextFromPDF(file);
+      setDocTexts(prev => ({ ...prev, [key]: text }));
+      setDocChecks(prev => ({ ...prev, [key]: validator(text) }));
+    } catch (err) {
+      const isScanned = err.message?.startsWith("SCANNED_PDF:");
+      setDocChecks(prev => ({
+        ...prev,
+        [key]: {
+          ready: false,
+          score: 0,
+          checks: [{
+            label: isScanned ? "Scanned PDF — no extractable text" : "Could not read document",
+            passed: false,
+            value: null,
+          }],
+        },
+      }));
+    } finally {
+      setExtractingKeys(prev => { const n = { ...prev }; delete n[key]; return n; });
+    }
+  };
 
   const handleModeChange = (mode) => {
     setTransportMode(mode);
     setFiles({});
+    setDocTexts({});
+    setDocChecks({});
+    setExtractingKeys({});
   };
 
   const uploaded = uploadedCount(files, transportMode);
   const required = requiredCount(transportMode);
   const modeIcon = MODES[transportMode].icon;
 
+  // Instant checklist gate: Invoice + BOL/AWB + Packing List must all pass
+  // their quick, regex-based readiness check before AI validation can run.
+  // (Multimode has extra doc slots the checklist doesn't cover, so it keeps
+  // the original "all required docs uploaded" gate.)
+  const quickReady = transportMode === "multi"
+    ? true
+    : !!(docChecks.invoice?.ready && docChecks.billOfLading?.ready && docChecks.packingList?.ready);
+  const canValidate = uploaded >= required && quickReady;
+
   const handleValidate = async () => {
     if (uploaded < required) { alert(`Please upload all ${required} documents.`); return; }
+    if (!quickReady) { alert("Please complete the document readiness checklist before running validation."); return; }
     setLoading(true); setResults(null);
 
     try {
       let invoiceText = "", bolText = "", packingText = "", awbText = null;
 
       if (transportMode === "multi") {
-        invoiceText  = await extractTextFromPDF(files.invoice);
-        bolText      = await extractTextFromPDF(files.seaBol);
-        packingText  = await extractTextFromPDF(files.packingList);
+        invoiceText  = docTexts.invoice     || await extractTextFromPDF(files.invoice);
+        bolText      = docTexts.seaBol      || await extractTextFromPDF(files.seaBol);
+        packingText  = docTexts.packingList || await extractTextFromPDF(files.packingList);
       } else {
-        invoiceText  = await extractTextFromPDF(files.invoice);
-        bolText      = await extractTextFromPDF(files.billOfLading);
-        packingText  = await extractTextFromPDF(files.packingList);
+        invoiceText  = docTexts.invoice      || await extractTextFromPDF(files.invoice);
+        bolText      = docTexts.billOfLading || await extractTextFromPDF(files.billOfLading);
+        packingText  = docTexts.packingList  || await extractTextFromPDF(files.packingList);
         if (transportMode === "air") awbText = bolText;
       }
 
@@ -783,7 +854,7 @@ function Dashboard() {
               </span>
             )}
             {activeTab === "validate" && (
-              <button className="validate-btn" onClick={handleValidate} disabled={loading || uploaded < required}>
+              <button className="validate-btn" onClick={handleValidate} disabled={loading || !canValidate}>
                 {loading ? <><span className="spinner" /> Validating…</> : "✦ Run Validation"}
               </button>
             )}
@@ -840,6 +911,36 @@ function Dashboard() {
               transportMode={transportMode}
               onModeChange={handleModeChange}
             />
+
+            {/* ── Instant document readiness checklists ── */}
+            {transportMode !== "multi" && (files.invoice || files.billOfLading || files.packingList) && (
+              <div className="doc-checklist-grid">
+                {files.invoice && (
+                  <DocumentChecklist
+                    title="Commercial Invoice"
+                    icon="🧾"
+                    loading={!!extractingKeys.invoice}
+                    result={docChecks.invoice}
+                  />
+                )}
+                {files.billOfLading && (
+                  <DocumentChecklist
+                    title={bolHeaderLabel}
+                    icon={transportMode === "air" ? "✈️" : "🚢"}
+                    loading={!!extractingKeys.billOfLading}
+                    result={docChecks.billOfLading}
+                  />
+                )}
+                {files.packingList && (
+                  <DocumentChecklist
+                    title="Packing List"
+                    icon="📦"
+                    loading={!!extractingKeys.packingList}
+                    result={docChecks.packingList}
+                  />
+                )}
+              </div>
+            )}
           </div>
         )}
 

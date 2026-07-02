@@ -1,5 +1,6 @@
 import { createContext, useContext, useState } from "react";
 import emailjs from "@emailjs/browser";
+import { validatePassword } from "../services/PasswordValidator";
 const AuthContext = createContext(null);
 
 function hashPassword(password) {
@@ -37,7 +38,10 @@ export function AuthProvider({ children }) {
   const register = (name, email, password) => {
     if (!name.trim())              return { ok: false, error: "Enter your name." };
     if (!email.includes("@"))      return { ok: false, error: "Enter a valid email." };
-    if (password.length < 6)       return { ok: false, error: "Password must be at least 6 characters." };
+    const pwCheck = validatePassword(password);
+    if (!pwCheck.valid) {
+      return { ok: false, error: "Password must be at least 6 characters and include a number and a special character." };
+    }
 
     const users = getUsers();
     if (users[email.toLowerCase()]) return { ok: false, error: "An account with this email already exists." };

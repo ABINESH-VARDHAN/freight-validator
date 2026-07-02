@@ -1,5 +1,5 @@
 import { createContext, useContext, useState } from "react";
-
+import emailjs from "@emailjs/browser";
 const AuthContext = createContext(null);
 
 function hashPassword(password) {
@@ -74,32 +74,36 @@ export function AuthProvider({ children }) {
   };
 
   // ── Generate & send OTP ───────────────────────────────────────────
-  const sendOtp = async (email, purpose = "login") => {
+    const sendOtp = async (email, purpose = "login") => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = Date.now() + 10 * 60 * 1000; // 10 minutes
+    const expires = Date.now() + 10 * 60 * 1000;
     setOtpStore(prev => ({ ...prev, [email.toLowerCase()]: { code, expires, purpose } }));
 
     const subject = purpose === "login"
-      ? "Your Freight Validator login code"
-      : "Your Freight Validator password reset code";
+    ? "Your Freight Validator login code"
+    : "Your Freight Validator password reset code";
 
-    const text = purpose === "login"
-      ? `Your 2-step verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email.`
-      : `Your password reset code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email.`;
+    const message = purpose === "login"
+    ? `Your 2-step verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email.`
+    : `Your password reset code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email.`;
 
     try {
-      const res = await fetch("/api/send-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: email, subject, text }),
-      });
-      if (!res.ok) throw new Error("Failed to send OTP");
-      return { ok: true };
+    await emailjs.send(
+      process.env.REACT_APP_EMAILJS_SERVICE_ID,
+      process.env.REACT_APP_EMAILJS_TEMPLATE_ID,
+      {
+        email:   email,
+        subject: subject,
+        message: message,
+      },
+      process.env.REACT_APP_EMAILJS_PUBLIC_KEY
+      );
+    return { ok: true };
     } catch (err) {
-      return { ok: false, error: "Failed to send verification email. Try again." };
+    console.error("OTP send error:", err);
+    return { ok: false, error: "Failed to send verification email. Try again." };
     }
-  };
-
+    };
   // ── Verify OTP (login 2FA) ────────────────────────────────────────
   const verifyLoginOtp = (email, code, rememberMe) => {
     const entry = otpStore[email.toLowerCase()];

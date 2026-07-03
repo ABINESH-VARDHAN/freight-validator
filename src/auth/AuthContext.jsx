@@ -1,10 +1,9 @@
 import { createContext, useContext, useState } from "react";
-import emailjs from "@emailjs/browser";
 import { validatePassword } from "../services/PasswordValidator";
+
 const AuthContext = createContext(null);
 
 function hashPassword(password) {
-  // Simple hash for localStorage-based auth (not for production with real backend)
   let hash = 0;
   for (let i = 0; i < password.length; i++) {
     const char = password.charCodeAt(i);
@@ -31,13 +30,13 @@ export function AuthProvider({ children }) {
   });
 
   const [loginError, setLoginError]   = useState("");
-  const [pendingUser, setPendingUser] = useState(null); // user waiting for 2FA
-  const [otpStore, setOtpStore]       = useState({});   // { email: { code, expires } }
+  const [pendingUser, setPendingUser] = useState(null);
+  const [otpStore, setOtpStore]       = useState({});
 
   // ── Register ──────────────────────────────────────────────────────
   const register = (name, email, password) => {
-    if (!name.trim())              return { ok: false, error: "Enter your name." };
-    if (!email.includes("@"))      return { ok: false, error: "Enter a valid email." };
+    if (!name.trim())         return { ok: false, error: "Enter your name." };
+    if (!email.includes("@")) return { ok: false, error: "Enter a valid email." };
     const pwCheck = validatePassword(password);
     if (!pwCheck.valid) {
       return { ok: false, error: "Password must be at least 6 characters and include a number and a special character." };
@@ -47,91 +46,101 @@ export function AuthProvider({ children }) {
     if (users[email.toLowerCase()]) return { ok: false, error: "An account with this email already exists." };
 
     const newUser = {
-      id: email.toLowerCase(),
-      name: name.trim(),
-      email: email.toLowerCase(),
-      avatar: name.trim().charAt(0).toUpperCase(),
+      id:           email.toLowerCase(),
+      name:         name.trim(),
+      email:        email.toLowerCase(),
+      avatar:       name.trim().charAt(0).toUpperCase(),
+      avatarColor:  "#1254b5",
       passwordHash: hashPassword(password),
-      createdAt: new Date().toISOString(),
+      createdAt:    new Date().toISOString(),
     };
     users[email.toLowerCase()] = newUser;
     saveUsers(users);
     return { ok: true };
   };
 
-  // ── Login (step 1 — verify credentials, then trigger 2FA) ─────────
-  const login = (email, password) => {
+  // ── Login (step 1) ────────────────────────────────────────────────
+  const login = (email, password, rememberMe = false) => {
     const users = getUsers();
     const found = users[email.toLowerCase()];
     if (!found) return { ok: false, error: "No account found with this email." };
     if (found.passwordHash !== hashPassword(password)) return { ok: false, error: "Incorrect password." };
 
-    // Store pending user and generate OTP
     const safeUser = {
-      id: found.id,
-      name: found.name,
-      email: found.email,
-      avatar: found.avatar,
+      id:          found.id,
+      name:        found.name,
+      email:       found.email,
+      avatar:      found.avatar,
+      avatarColor: found.avatarColor || "#1254b5",
+      createdAt:   found.createdAt,
+      isAdmin:     found.isAdmin || false,
     };
+
+    // Trusted device — skip 2FA
+    const trusted = localStorage.getItem(`fv_trusted_${email.toLowerCase()}`);
+    if (trusted === "true") {
+      setUser(safeUser);
+      localStorage.setItem("fv_session", JSON.stringify(safeUser));
+      return { ok: true, needsOtp: false };
+    }
+
     setPendingUser(safeUser);
     return { ok: true, needsOtp: true };
   };
 
-  // ── Generate & send OTP ───────────────────────────────────────────
-    const sendOtp = async (email, purpose = "login") => {
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+  // ── Send OTP via Resend serverless function ───────────────────────
+  const sendOtp = async (email, purpose = "login") => {
+    const code    = Math.floor(100000 + Math.random() * 900000).toString();
     const expires = Date.now() + 10 * 60 * 1000;
     setOtpStore(prev => ({ ...prev, [email.toLowerCase()]: { code, expires, purpose } }));
 
     const subject = purpose === "login"
-    ? "Your Freight Validator login code"
-    : "Your Freight Validator password reset code";
+      ? "Your Freight Validator login code"
+      : "Your Freight Validator password reset code";
 
-    const message = purpose === "login"
-    ? `Your 2-step verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email.`
-    : `Your password reset code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you didn't request this, ignore this email.`;
+    const text = purpose === "login"
+      ? `Your 2-step verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, ignore this email.`
+      : `Your password reset code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, ignore this email.`;
 
     try {
-    await emailjs.send(
-      process.env.REACT_APP_EMAILJS_SERVICE_ID,
-      process.env.REACT_APP_EMAILJS_TEMPLATE_ID,
-      {
-        email:   email,
-        subject: subject,
-        message: message,
-      },
-      process.env.REACT_APP_EMAILJS_PUBLIC_KEY
-      );
-    return { ok: true };
+      const res = await fetch("/api/send-otp", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ to: email, subject, text }),
+      });
+      if (!res.ok) throw new Error("Server error");
+      return { ok: true };
     } catch (err) {
-    console.error("OTP send error:", err);
-    return { ok: false, error: "Failed to send verification email. Try again." };
+      console.error("OTP send error:", err);
+      return { ok: false, error: "Failed to send verification email. Try again." };
     }
-    };
+  };
+
   // ── Verify OTP (login 2FA) ────────────────────────────────────────
   const verifyLoginOtp = (email, code, rememberMe) => {
     const entry = otpStore[email.toLowerCase()];
-    if (!entry) return { ok: false, error: "No OTP found. Request a new code." };
+    if (!entry)                     return { ok: false, error: "No OTP found. Request a new code." };
     if (Date.now() > entry.expires) return { ok: false, error: "Code expired. Request a new one." };
     if (entry.code !== code.trim()) return { ok: false, error: "Incorrect code. Try again." };
 
-    // OTP correct — complete login
     setOtpStore(prev => { const n = { ...prev }; delete n[email.toLowerCase()]; return n; });
     setUser(pendingUser);
     setPendingUser(null);
+
     if (rememberMe) {
       localStorage.setItem("fv_session", JSON.stringify(pendingUser));
+      localStorage.setItem(`fv_trusted_${email.toLowerCase()}`, "true");
     }
     return { ok: true };
   };
 
-  // ── Forgot password — verify OTP & set new password ──────────────
+  // ── Forgot password ───────────────────────────────────────────────
   const verifyResetOtp = (email, code) => {
     const entry = otpStore[email.toLowerCase()];
-    if (!entry) return { ok: false, error: "No OTP found. Request a new code." };
+    if (!entry)                     return { ok: false, error: "No OTP found. Request a new code." };
     if (Date.now() > entry.expires) return { ok: false, error: "Code expired. Request a new one." };
     if (entry.code !== code.trim()) return { ok: false, error: "Incorrect code. Try again." };
-    if (entry.purpose !== "reset") return { ok: false, error: "Invalid code purpose." };
+    if (entry.purpose !== "reset")  return { ok: false, error: "Invalid code purpose." };
     return { ok: true };
   };
 
@@ -145,6 +154,31 @@ export function AuthProvider({ children }) {
     users[email.toLowerCase()].passwordHash = hashPassword(newPassword);
     saveUsers(users);
     setOtpStore(prev => { const n = { ...prev }; delete n[email.toLowerCase()]; return n; });
+    return { ok: true };
+  };
+
+  // ── Update profile ────────────────────────────────────────────────
+  const updateProfile = ({ name, avatarColor }) => {
+    const users = getUsers();
+    if (!users[user.id]) return;
+    users[user.id].name        = name;
+    users[user.id].avatarColor = avatarColor;
+    users[user.id].avatar      = name.charAt(0).toUpperCase();
+    saveUsers(users);
+    const updated = { ...user, name, avatarColor, avatar: name.charAt(0).toUpperCase() };
+    setUser(updated);
+    localStorage.setItem("fv_session", JSON.stringify(updated));
+  };
+
+  // ── Change password ───────────────────────────────────────────────
+  const changePassword = (oldPassword, newPassword) => {
+    const users = getUsers();
+    if (!users[user.id]) return { ok: false, error: "Account not found." };
+    if (users[user.id].passwordHash !== hashPassword(oldPassword)) {
+      return { ok: false, error: "Current password is incorrect." };
+    }
+    users[user.id].passwordHash = hashPassword(newPassword);
+    saveUsers(users);
     return { ok: true };
   };
 
@@ -162,6 +196,7 @@ export function AuthProvider({ children }) {
       user, pendingUser,
       login, register, logout, can,
       sendOtp, verifyLoginOtp, verifyResetOtp, resetPassword,
+      updateProfile, changePassword,
       loginError, setLoginError,
     }}>
       {children}

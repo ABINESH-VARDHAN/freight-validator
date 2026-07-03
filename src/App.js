@@ -6,7 +6,6 @@ import { AuthProvider, useAuth } from "./auth/AuthContext";
 import LoginPage from "./auth/LoginPage";
 import ResultsPanel from "./components/ResultsPanel";
 import DocumentChecklist from "./components/DocumentChecklist";
-import emailjs from "@emailjs/browser";
 import "./App.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
@@ -415,16 +414,15 @@ function EmailModal({ results, confidence, fileNames, onClose }) {
     ? message + "\n\n-------------------------\n\n" + autoBody
     : autoBody;
 
-  await emailjs.send(
-    process.env.REACT_APP_EMAILJS_SERVICE_ID,
-    process.env.REACT_APP_EMAILJS_TEMPLATE_ID,
-    {
-      email: to,
-      subject: subject,
-      message: body,
-    },
-    process.env.REACT_APP_EMAILJS_PUBLIC_KEY
-  );
+  const res = await fetch("/api/send-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to, subject, text: body }),
+  });
+  if (!res.ok) {
+    const e = await res.json();
+    throw new Error(e.message || "Failed to send");
+  }
 
   setSent("done");
   setTimeout(onClose, 2500);

@@ -1,5 +1,4 @@
 import { createContext, useContext, useState } from "react";
-import emailjs from "@emailjs/browser";
 import { validatePassword } from "../services/PasswordValidator";
 
 const AuthContext = createContext(null);
@@ -91,37 +90,31 @@ export function AuthProvider({ children }) {
 
   // ── Send OTP via EmailJS ──────────────────────────────────────────
   const sendOtp = async (email, purpose = "login") => {
-    const code    = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = Date.now() + 10 * 60 * 1000;
-    setOtpStore(prev => ({ ...prev, [email.toLowerCase()]: { code, expires, purpose } }));
+  const code    = Math.floor(100000 + Math.random() * 900000).toString();
+  const expires = Date.now() + 10 * 60 * 1000;
+  setOtpStore(prev => ({ ...prev, [email.toLowerCase()]: { code, expires, purpose } }));
 
-    const subject = purpose === "login"
-      ? "Your Freight Validator login code"
-      : "Your Freight Validator password reset code";
+  const subject = purpose === "login"
+    ? "Your Freight Validator login code"
+    : "Your Freight Validator password reset code";
 
-    const message = purpose === "login"
-      ? `Your 2-step verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, ignore this email.`
-      : `Your password reset code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, ignore this email.`;
+  const text = purpose === "login"
+    ? `Your 2-step verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, ignore this email.`
+    : `Your password reset code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, ignore this email.`;
 
-    try {
-      await emailjs.send(
-        "service_3z7jkbd",
-        "template_qyhmwri",
-        {
-          name:    "Freight Validator",
-          email:   email,
-          subject: subject,
-          message: message,
-        },
-        "LF4RF47mB0d6kpLPB"
-      );
-      return { ok: true };
+  try {
+    const res = await fetch("/api/send-otp", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ to: email, subject, text }),
+    });
+    if (!res.ok) throw new Error("Server error");
+    return { ok: true };
     } catch (err) {
       console.error("OTP send error:", err);
       return { ok: false, error: "Failed to send verification email. Try again." };
-    }
+   }
   };
-
   // ── Verify OTP (login 2FA) ────────────────────────────────────────
   const verifyLoginOtp = (email, code, rememberMe) => {
     const entry = otpStore[email.toLowerCase()];

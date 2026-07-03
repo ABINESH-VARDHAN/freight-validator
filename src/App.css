@@ -2082,3 +2082,22 @@ body {
 @media (max-width: 640px) {
   .doc-checklist-grid { grid-template-columns: 1fr; }
 }
+/* ── Password checklist ── */
+.pass-checklist {
+  list-style: none;
+  margin: 8px 0 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pass-checklist li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+}
+.check-pass { color: var(--ok); }
+.check-fail { color: var(--text-muted); }
+.pass-match-error { font-size: 0.78rem; color: var(--error); margin-top: 4px; }
+.pass-match-ok    { font-size: 0.78rem; color: var(--ok);   margin-top: 4px; }

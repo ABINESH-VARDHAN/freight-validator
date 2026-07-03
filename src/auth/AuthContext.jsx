@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from "react";
+import emailjs from "@emailjs/browser";
 import { validatePassword } from "../services/PasswordValidator";
 
 const AuthContext = createContext(null);
@@ -88,7 +89,7 @@ export function AuthProvider({ children }) {
     return { ok: true, needsOtp: true };
   };
 
-  // ── Send OTP via Resend serverless function ───────────────────────
+  // ── Send OTP via EmailJS ──────────────────────────────────────────
   const sendOtp = async (email, purpose = "login") => {
     const code    = Math.floor(100000 + Math.random() * 900000).toString();
     const expires = Date.now() + 10 * 60 * 1000;
@@ -98,17 +99,22 @@ export function AuthProvider({ children }) {
       ? "Your Freight Validator login code"
       : "Your Freight Validator password reset code";
 
-    const text = purpose === "login"
+    const message = purpose === "login"
       ? `Your 2-step verification code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, ignore this email.`
       : `Your password reset code is: ${code}\n\nThis code expires in 10 minutes.\n\nIf you did not request this, ignore this email.`;
 
     try {
-      const res = await fetch("/api/send-otp", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ to: email, subject, text }),
-      });
-      if (!res.ok) throw new Error("Server error");
+      await emailjs.send(
+        "service_3z7jkbd",
+        "template_qyhmwri",
+        {
+          name:    "Freight Validator",
+          email:   email,
+          subject: subject,
+          message: message,
+        },
+        "LF4RF47mB0d6kpLPB"
+      );
       return { ok: true };
     } catch (err) {
       console.error("OTP send error:", err);

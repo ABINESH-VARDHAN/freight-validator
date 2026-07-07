@@ -1,7 +1,7 @@
 module.exports = async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
-  const { to, subject, text } = req.body;
-  if (!to || !subject || !text) return res.status(400).json({ error: "Missing fields" });
+  if (req.method !== "POST") return res.status(405).end();
+
+  const { to, subject, message } = req.body;
 
   try {
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -11,17 +11,18 @@ module.exports = async function handler(req, res) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        sender: { name: "Freight Validator", email: "freightvalidator.reports@gmail.com" },
-        to: [{ email: to }],
-        subject,
-        textContent: text,
+        sender:   { name: "Freight Validator", email: "freightvalidator.reports@gmail.com" },
+        to:       [{ email: to }],
+        subject:  subject,
+        textContent: message,
       }),
     });
+
     if (!response.ok) {
-      const data = await response.json();
-      return res.status(response.status).json({ error: data.message });
+      const err = await response.json();
+      return res.status(400).json({ error: err.message });
     }
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ ok: true });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

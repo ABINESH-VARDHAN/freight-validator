@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "./auth/AuthContext";
 import LoginPage from "./auth/LoginPage";
 import ResultsPanel from "./components/ResultsPanel";
 import DocumentChecklist from "./components/DocumentChecklist";
+
 import "./App.css";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js`;
@@ -414,14 +415,14 @@ function EmailModal({ results, confidence, fileNames, onClose }) {
     ? message + "\n\n-------------------------\n\n" + autoBody
     : autoBody;
 
-  const res = await fetch("/api/send-email", {
+  const response = await fetch("/api/send-otp", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ to, subject, text: body }),
   });
-  if (!res.ok) {
-    const e = await res.json();
-    throw new Error(e.message || "Failed to send");
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Failed to send email");
   }
 
   setSent("done");
